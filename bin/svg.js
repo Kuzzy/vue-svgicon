@@ -72,10 +72,10 @@ let svgo = new Svgo({
 })
 
 // simple template compile
-function compile (content, data) {
-    return content.replace(/\${(\w+)}/gi, function (match, name) {
-        return data[name] ? data[name] : ''
-    })
+function compile(content, data) {
+  return content.replace(/\${(\w+)}/gi, function (match, name) {
+    return data[name] ? data[name] : ''
+  })
 }
 
 // get file path by filename
@@ -89,7 +89,7 @@ function getFilePath (filename) {
 }
 
 // generate index.js, which import all icons
-function generateIndex(files) {
+function generateIndex(files, target) {
   let content = ''
   files.forEach((filename) => {
     let name = path.basename(filename).split('.')[0]
@@ -97,7 +97,7 @@ function generateIndex(files) {
     content += `require('./${filePath}${name}')\n`
   })
 
-  fs.writeFile(path.join(targetPath, `index.${ext}`), content, 'utf-8', (err) => {
+  fs.writeFile(path.join(target, `index.${ext}`), content, 'utf-8', (err) => {
     if (err) {
       console.log(err)
       return false
@@ -107,13 +107,26 @@ function generateIndex(files) {
   })
 }
 
+function getDirectories(srcpath) {
+  return fs.readdirSync(srcpath)
+    .filter(file => fs.lstatSync(path.join(srcpath, file)).isDirectory())
+}
+
 glob(filepath, function (err, files) {
   if (err) {
     console.log(err)
     return false
   }
 
-  files = files.map((filepath) => path.normalize(filepath));
+  files = files.map((filepath) => path.normalize(filepath))
+
+  let groups = getDirectories(path.join(process.cwd(), args.s, '/'))
+  let groupsBy = groups.reduce((acc, v) => {
+    acc[v] = files.filter((f) => f.includes(`/${v}/`))
+    return acc
+  }, {})
+
+  let rootFiles = files.filter((f) => !groups.some((g) => f.includes(`/${g}/`)))
 
   files.forEach((filename, ix) => {
     let name = path.basename(filename).split('.')[0]
@@ -145,7 +158,7 @@ glob(filepath, function (err, files) {
 
       fs.writeFile(path.join(targetPath, filePath, name + `.${ext}`), content, 'utf-8', function (err) {
         if (ix === files.length - 1) {
-          generateIndex(files)
+          generateIndex(rootFiles, targetPath)
         }
         if (err) {
           console.log(err)
@@ -156,5 +169,8 @@ glob(filepath, function (err, files) {
       })
     })
   })
-})
 
+  for (let g in groupsBy) {
+    generateIndex(groupsBy[g], `${targetPath}/${g}`)
+  }
+})
